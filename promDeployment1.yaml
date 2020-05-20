@@ -53,7 +53,7 @@ spec:
         - name: prometheus-config-volume
           configMap:
             defaultMode: 420
-            name: prometheus-server-conf
+            name: prometheus-server-conf1
         - name: prometheus-storage-volume
           emptyDir: {}
 ---

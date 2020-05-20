@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-deployment
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus-server
+  template:
+    metadata:
+      labels:
+        app: prometheus-server
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.2.1
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus/"
+            - "--web.enable-lifecycle"
+            - "--web.enable-admin-api"
+            - "--web.listen-address=127.0.0.1:9091"
+          ports:
+            - containerPort: 9091
+          volumeMounts:
+            - name: prometheus-config-volume
+              mountPath: /etc/prometheus/
+            - name: prometheus-storage-volume
+              mountPath: /prometheus/
+        - name: thanos-sidecar
+          image: thanosio/thanos:v0.12.1
+          args:
+            - "sidecar"
+            - "--log.level=debug"
+            - "--tsdb.path=/prometheus/"
+            - "--prometheus.url=http://127.0.0.1:9091"
+            - "--http-address=0.0.0.0:19091"
+            - "--grpc-address=0.0.0.0:19191"
+            - "--reloader.config-file=/etc/prometheus/prometheus.yml"
+          env:
+            - name: pod_name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          volumeMounts:
+            - name: prometheus-config-volume
+              mountPath: /etc/prometheus/
+            - name: prometheus-storage-volume
+              mountPath: /prometheus/
+      volumes:
+        - name: prometheus-config-volume
+          configMap:
+            defaultMode: 420
+            name: prometheus-server-conf
+        - name: prometheus-storage-volume
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: monitoring
+  annotations:
+      prometheus.io/scrape: 'true'
+      prometheus.io/port:   '9091'
+spec:
+  selector:
+    app: prometheus-server
+  type: NodePort
+  ports:
+    - port: 9091
+      targetPort: 9091
+      nodePort: 30000
